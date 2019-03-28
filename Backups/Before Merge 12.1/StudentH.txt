@@ -1,0 +1,127 @@
+#ifndef STUDENTWORLD_H_
+#define STUDENTWORLD_H_
+
+#include "GameWorld.h"
+#include "GameConstants.h"
+#include "Actor.h"
+#include <string>
+#include <vector>
+#include <memory>
+#include <ctime>
+
+using namespace std;
+
+// Students:  Add code to this file, StudentWorld.cpp, Actor.h, and Actor.cpp
+
+class StudentWorld : public GameWorld
+{
+public:
+	StudentWorld(std::string assetDir)
+		: GameWorld(assetDir)
+	{
+	}
+
+	virtual int init()
+	{
+		srand(time(NULL));
+        myPlayer = std::make_shared<Iceman>(this);
+        for (int x = 0; x < 64; x++) {
+            for (int y = 0; y < 64; y++) {
+                if (((x > 29 && x < 34) && y > 3) || y>59 ) {
+                    iceObjects[x][y] = nullptr;
+                }
+                else {
+                    std::unique_ptr<Ice> temp(new Ice(x, y, this));
+                    iceObjects[x][y] = std::move(temp);
+                }
+            }
+        }
+		myPlayers.emplace_back(new Protester(IID_PROTESTER, 5, this));
+		return GWSTATUS_CONTINUE_GAME;
+	}
+
+	virtual int move()
+	{
+        setDisplayText();
+		myPlayer->doSomething();
+		// Running doSomething every tick for every player.
+		// Set to invisible every object that reaches 0 life;
+		for (auto dummy : myPlayers) {
+			if (dummy->getLife() > 0)
+				dummy->doSomething();
+			else
+				dummy->setVisible(false);
+		}
+		return GWSTATUS_CONTINUE_GAME;
+	}
+
+	virtual void cleanUp()
+	{
+	}
+
+	///////////////////////// Will be modified in future /////////////////////////
+	bool setVisibleRadius12() { return 0; } // SETS ALL NON-MOVING ACTORS WITHIN RADIUS OF 12 TO TRUE.
+	/////////////////////////  Will be modified in future /////////////////////////
+
+	// Checks if there is an actor occupies the field within a certain range of a coordiante, Returns a pointer to the actor.
+	//std::shared_ptr<ActorsBase> isOccupied(int const &x, int const &y, int const &rangeX, int const &rangeY);
+
+	// Removes ice as the Iceman moves in the field.
+	bool iceRemover(int const &x, int const &y, int const &Direction);
+
+	// Creates an actor "Squirt" when Player presses space bar, emplaces it in actors vector.  
+	void squirtCreator(const int &posX, const int &posY, ActorsBase::Direction direction);
+
+	// Stats presentation.
+	string StatFormat(int,int,int,int,int,int,int,int);
+    void setDisplayText();
+
+	////////////////////////////////
+	//		 For Protester
+	///////////////////////////////
+    // For protester purposes - checks if a position is occupied by iceman
+	bool isIcemanInPosition(const int& x, const int& y);
+
+	// For protesters to manipulate Iceman (annoy or track down and follow) - func returns a weak_ptr to Iceman.
+	std::weak_ptr<Iceman> getIceman();
+
+
+	// Checks if a golden nugget occupies a square (of which to protester might occupy)
+	std::shared_ptr<ActorsBase> isSquareOccupiedByGoldenNugget(const int& x, const int& y, const ActorsBase::Direction& dir);
+		// Checks if occupied by protester
+	std::shared_ptr<ActorsBase> isSquareOccupiedByProtester(const int& x, const int& y);
+	// Checks if occupied by protester
+	bool isSquareOccupiedByBoulder(const int& x, const int& y, const ActorsBase::Direction& dir);
+
+	
+
+    ///////////////////////// Nevin is working on it. It's for boulder class /////////////////////////
+    bool isStable(const int &x);
+    bool isWaiting();
+    bool isFalling();
+    ///////////////////////// Nevin is working on it. It's for boulder class /////////////////////////
+
+	// returns true if an actor at point x,y has ice in the direction if faces.
+	bool isIcy(const int& x, const int& y, const ActorsBase::Direction& dir);
+
+	// Return true if there's ice at a specific point x,y
+	bool isIcy(const int& x, const int& y); 
+
+
+
+	// map creator to find the nearest exit.
+	int** trackingMapCreator();
+
+private:
+	std::shared_ptr<Iceman> myPlayer;
+	std::vector<std::shared_ptr<ActorsBase>> myPlayers;
+	std::unique_ptr<Ice> iceObjects[64][64];
+};
+
+#endif // STUDENTWORLD_H_
+
+/////////////////////////////
+// Should we think about a function that terminates (deletes) all invisible objects after a tick? Means - setting an object to invisible is as good as deleting it w/o a memory leak? //
+// iceDeleter() for example.
+////////////////////////////
+

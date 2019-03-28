@@ -1,0 +1,192 @@
+#ifndef STUDENTWORLD_H_
+#define STUDENTWORLD_H_
+
+#include "GameWorld.h"
+#include "GameConstants.h"
+#include "Actor.h"
+#include <string>
+#include <vector>
+#include <memory>
+#include <ctime>
+
+using namespace std;
+
+// Students:  Add code to this file, StudentWorld.cpp, Actor.h, and Actor.cpp
+
+class StudentWorld : public GameWorld
+{
+public:
+	StudentWorld(std::string assetDir)
+		: GameWorld(assetDir)
+	{
+	}
+
+	virtual int init()
+	{
+		srand(time(NULL));
+        myPlayer = std::make_shared<Iceman>(this);
+    
+        for (int x = 0; x < 64; x++)
+        {
+            for (int y = 0; y < 64; y++) {
+                if (((x > 29 && x < 34) && y > 3) || y>59) {
+                    iceObjects[x][y] = nullptr;
+                }
+                else
+                {
+                    std::unique_ptr<Ice> temp(new Ice(x, y, this));
+                    iceObjects[x][y] = std::move(temp);
+                }
+            }
+        }
+        
+        // --------------------------------------- Actors ---------------------------------------
+        int current_level_number = getLevel();
+        int B = min((current_level_number / 2) + 2, 9);
+        int L = min((2 + current_level_number), 21);
+        //int G = min(5 - current_level_number/2, 2);
+        num_of_oil = L;
+        
+        do
+        {
+            int randomX = (rand()%56);
+            int randomY = (rand()%56);
+            
+            while (((randomX > 25 && randomX < 34)) || randomY>56 || randomY < 3)
+            {
+                randomX = (rand()%56);
+                randomY = (rand()%56);
+            }
+            
+            for(int i = 0; i < 4; i++)
+            {
+                for(int j = 0; j < 4; j++)
+                {
+                    iceObjects[randomX + i][randomY + j]->setVisible(false);
+                    iceObjects[randomX + i][randomY + j].reset();
+                    iceObjects[randomX + i][randomY + j] = nullptr;
+                }
+            }
+            
+            if(B > 0)
+            {
+                myPlayers.emplace_back(new Boulder(randomX, randomY,this));
+                B--;
+            }
+            
+            int randomX1 = (rand()%56);
+            int randomY1 = (rand()%56);
+            
+            while ((((randomX1 > 25 && randomX1 < 34)) || randomY1>56 || randomY1 < 3) && ((randomX1 == randomX) && (randomY1 == randomY)))
+            {
+                randomX1 = (rand()%56);
+                randomY1 = (rand()%56);
+            }
+            
+            if(L > 0)
+            {
+                myPlayers.emplace_back(new oil(randomX1, randomY1,this));
+                L--;
+            }
+        }while((B != 0) && (L != 0));
+        
+        // --------------------------------------- Actors ---------------------------------------
+		return GWSTATUS_CONTINUE_GAME;
+	}
+
+	virtual int move()
+	{
+        setDisplayText();
+		myPlayer->doSomething();
+		// Running doSomething every tick for every player.
+		// Set to invisible every object that reaches 0 life;
+		for (auto dummy : myPlayers) {
+			if (dummy->getLife() > 0)
+				dummy->doSomething();
+			else
+				dummy->setVisible(false);
+		}
+        garbageCollector();
+        
+        if(myPlayer->getLife() == 0)
+            return GWSTATUS_PLAYER_DIED;
+        
+        if(getOil() == 0)
+        {
+            playSound(SOUND_FINISHED_LEVEL);
+            return GWSTATUS_FINISHED_LEVEL;
+        }
+        
+		return GWSTATUS_CONTINUE_GAME;
+	}
+
+	virtual void cleanUp()
+	{
+        
+	}
+
+	///////////////////////// Will be modified in future /////////////////////////
+	bool setVisibleRadius12() { return 0; } // SETS ALL NON-MOVING ACTORS WITHIN RADIUS OF 12 TO TRUE.
+	/////////////////////////  Will be modified in future /////////////////////////
+
+	// Checks if there is an actor occupies the field within a certain range of a coordiante, Returns a pointer to the actor.
+	//std::shared_ptr<ActorsBase> isOccupied(int const &x, int const &y, int const &rangeX, int const &rangeY);
+
+	// Removes ice as the Iceman moves in the field.
+	bool iceRemover(int const &x, int const &y, int const &Direction);
+    bool isIcemanInPosition(const int& x, const int& y);
+    bool isIcy(const int& x, const int& y);
+    
+	// Creates an actor "Squirt" when Player presses space bar, emplaces it in actors vector.  
+	void squirtCreator(const int &posX, const int &posY, ActorsBase::Direction direction);
+
+    bool isIcy(const int& x, const int& y, const ActorsBase::Direction& dir);
+    
+    // Checks if a golden nugget occupies a square (of which to protester might occupy)
+    std::shared_ptr<ActorsBase> isSquareOccupiedByGoldenNugget(const int& x, const int& y, const ActorsBase::Direction& dir);
+    // Checks if occupied by protester
+    std::shared_ptr<ActorsBase> isSquareOccupiedByProtester(const int& x, const int& y);
+    // Checks if occupied by protester
+    bool isSquareOccupiedByBoulder(const int& x, const int& y, const ActorsBase::Direction& dir);
+    
+    //For clearing the ice overlapping with boulders
+    bool OccupiedByBoulder(const int& x, const int& y);
+    //Checks if boulder comes within a radius of 3 and annoys the actors
+    void AnnoyingBoulder(const int& x, const int& y);
+    
+    //Checks if barrel is within range of four respect to the Iceman
+    bool isInRangeOfFour(const int& x, const int& y);
+    //Checks if barrel is within range of three respect to the Iceman and in this case activates the barrel
+    bool isInRangeOfThree(const int& x, const int& y);
+
+    void setOil() { num_of_oil--;}
+    int getOil() { return num_of_oil;}
+    
+    //Clean up all the actors that are invisible
+    void garbageCollector();
+    
+    std::weak_ptr<Iceman> getIceman();
+    
+	// Stats presentation.
+	string StatFormat(int,int,int,int,int,int,int,int);
+    void setDisplayText();
+
+
+
+	// map creator to find the nearest exit.
+	int** trackingMapCreator();
+
+private:
+	std::shared_ptr<Iceman> myPlayer;
+	std::vector<std::shared_ptr<ActorsBase>> myPlayers;
+	std::unique_ptr<Ice> iceObjects[64][64];
+    int num_of_oil;
+};
+
+#endif // STUDENTWORLD_H_
+
+/////////////////////////////
+// Should we think about a function that terminates (deletes) all invisible objects after a tick? Means - setting an object to invisible is as good as deleting it w/o a memory leak? //
+// iceDeleter() for example.
+////////////////////////////
+

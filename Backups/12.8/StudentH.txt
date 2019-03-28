@@ -1,0 +1,265 @@
+#ifndef STUDENTWORLD_H_
+#define STUDENTWORLD_H_
+
+#include "GameWorld.h"
+#include "GameConstants.h"
+#include "Actor.h"
+#include <string>
+#include <vector>
+#include <memory>
+#include <ctime>
+#include <algorithm>
+#include <utility>
+
+using namespace std;
+
+// Students:  Add code to this file, StudentWorld.cpp, Actor.h, and Actor.cpp
+
+class StudentWorld : public GameWorld
+{
+public:
+	StudentWorld(std::string assetDir)
+		: GameWorld(assetDir)
+	{
+	}
+
+	virtual int init()
+	{
+		srand(time(NULL));
+		myPlayer = std::make_shared<Iceman>(this);
+
+		for (int x = 0; x < 64; x++)
+		{
+			for (int y = 0; y < 64; y++) {
+				if (((x > 29 && x < 34) && y > 3) || y > 58) {
+					iceObjects[x][y] = nullptr;
+				}
+				else
+				{
+					std::unique_ptr<Ice> temp(new Ice(x, y, this));
+					iceObjects[x][y] = std::move(temp);
+				}
+			}
+		}
+
+		// Create a map of the field. Wherever an item cannot be created, fill in the spot with 999. ONLY spots where the X,Y coordinates of a newly
+		// created objects CAN be placed, will be filled with -1 (otherwise, 999). I DONT need to use smart pointers, since NOT dynamically allocated.
+		int initMap[64][64];
+		for (int i = 0; i < 64; i++) {
+			for (int j = 0; j < 64; j++) {
+				if ((i > 25 && i < 34) || i > 60 || j > 56)
+					initMap[i][j] = 999;
+				else 
+					initMap[i][j] = -1;
+			}
+		}
+		///////////////////////////////////////////
+		// Real Conditions for constructing 
+		// an actor
+		//////////////////////////////////////////
+		int B = std::min((int)(getLevel() / 2 + 2), 9);
+		int G = std::max((int)(5-(getLevel() / 2)), 2);
+		int L = std::min((int)(2 + getLevel()), 21);
+		/////////////////////////////////////////////
+		// 1 reg protester at the begginig of stage
+		////////////////////////////////////////////
+		myPlayers.emplace_back(new Protester(IID_PROTESTER, 5, this));
+		////////////////////////////////////
+		// Condition to create boulders
+		////////////////////////////////////
+		while (B) {
+			int startX = 0, startY = 0;
+			bool cant_be_instantiated = false; // Assume the spot is empty and a boulder can be instantiated
+			do {
+				startX = rand() % 61;
+				startY = rand() % 37 + 20;
+				// If the spot is occupied, randomise a different spot.
+				if (initMap[startX][startY] != -1)
+					cant_be_instantiated = true;
+				else 
+					cant_be_instantiated = false;
+			} while (cant_be_instantiated);
+			myPlayers.emplace_back(new Boulder(startX, startY, this));
+			boulderIceRemover(startX, startY);
+			// Update the initMap for new place that objects cant be instantiated.
+			for (int i = -6; i < 7; i++) {
+				for (int j = -6; j < 7; j++) {
+					if (startX + i > 0 && startY + j > 0 && startX+i <64 && startY+j<64) {
+						// All spots within a radius of 6 of the instantiation point will be labeled as occupied (999)
+						if (sqrt(pow(i, 2) + pow(j, 2)) <= 6)
+							initMap[startX+i][startY+j] = 999;
+					}
+				}
+			}
+			B--;
+		}
+		////////////////////////////////////
+		// Condition to create Gold nuggets
+		////////////////////////////////////
+		while (G) {
+			int startX = 0, startY = 0;
+			bool cant_be_instantiated = false; // Assume the spot is empty and a boulder can be instantiated
+			do {
+				startX = rand() % 61;
+				startY = rand() % 57;
+				// If the spot is occupied, randomise a different spot.
+				if (initMap[startX][startY] != -1)
+					cant_be_instantiated = true;
+				else
+					cant_be_instantiated = false;
+			} while (cant_be_instantiated);
+			myPlayers.emplace_back(new GoldNugget(startX, startY, this, true));
+			// Update the initMap for new place that objects cant be instantiated.
+			for (int i = -6; i < 7; i++) {
+				for (int j = -6; j < 7; j++) {
+					if (startX + i > 0 && startY + j > 0 && startX + i <64 && startY + j<64) {
+						// All spots within a radius of 6 of the instantiation point will be labeled as occupied (999)
+						if (sqrt(pow(i, 2) + pow(j, 2)) <= 6)
+							initMap[startX + i][startY + j] = 999;
+					}
+				}
+			}
+			G--;
+		}
+		////////////////////////////////////
+		// Condition to create Oil Barrels
+		////////////////////////////////////
+		while (L) {
+			int startX = 0, startY = 0;
+			bool cant_be_instantiated = false; // Assume the spot is empty and a boulder can be instantiated
+			do {
+				startX = rand() % 61;
+				startY = rand() % 57;
+				// If the spot is occupied, randomise a different spot.
+				if (initMap[startX][startY] != -1)
+					cant_be_instantiated = true;
+				else
+					cant_be_instantiated = false;
+			} while (cant_be_instantiated);
+			myPlayers.emplace_back(new oil(startX, startY, this));
+			num_of_oil++;
+			// Update the initMap for new place that objects cant be instantiated.
+			for (int i = -6; i < 7; i++) {
+				for (int j = -6; j < 7; j++) {
+					if (startX + i > 0 && startY + j > 0 && startX + i <64 && startY + j<64) {
+						// All spots within a radius of 6 of the instantiation point will be labeled as occupied (999)
+						if (sqrt(pow(i, 2) + pow(j, 2)) <= 6)
+							initMap[startX + i][startY + j] = 999;
+					}
+				}
+			}
+			L--;
+		}
+        
+		return GWSTATUS_CONTINUE_GAME;
+	}
+
+	virtual int move()
+	{
+        setDisplayText();
+		myPlayer->doSomething();
+		// Running doSomething every tick for every player.
+		// Set to invisible every object that reaches 0 life;
+		for (auto dummy : myPlayers) {
+			if (dummy->getLife() > 0)
+				dummy->doSomething();
+			else
+				dummy->setVisible(false);
+		}
+        garbageCollector();
+        
+        if(myPlayer->getLife() <= 0)
+            return GWSTATUS_PLAYER_DIED;
+        
+        if(getOil() <= 0)
+        {
+            playSound(SOUND_FINISHED_LEVEL);
+            return GWSTATUS_FINISHED_LEVEL;
+        }
+        
+		return GWSTATUS_CONTINUE_GAME;
+	}
+
+	virtual void cleanUp()
+	{
+        
+	}
+
+	void setVisibleRadius12(int x, int y);
+
+	// Checks if there is an actor occupies the field within a certain range of a coordiante, Returns a pointer to the actor.
+	//std::shared_ptr<ActorsBase> isOccupied(int const &x, int const &y, int const &rangeX, int const &rangeY);
+
+	// Removes ice as the Iceman moves in the field.
+	bool iceRemover(int const &x, int const &y, int const &Direction);
+    bool isIcemanInPosition(const int& x, const int& y);
+    bool isIcy(const int& x, const int& y);
+
+	// Removes ice for boulder
+	void boulderIceRemover(int const &x, int const &y);
+    
+	// Creates an actor "Squirt" when Player presses space bar, emplaces it in actors vector.  
+	void squirtCreator(const int &posX, const int &posY, ActorsBase::Direction direction);
+
+    bool isIcy(const int& x, const int& y, const ActorsBase::Direction& dir);
+    
+    // Checks if a golden nugget occupies a square (of which to protester might occupy)
+    std::shared_ptr<GoldNugget> isSquareOccupiedByGoldenNugget(const int& x, const int& y, const ActorsBase::Direction& dir);
+    // Checks if occupied by protester
+    std::shared_ptr<Protester> isSquareOccupiedByProtester(const int& x, const int& y);
+	std::shared_ptr<HardcoreProtester> isSquareOccupiedByHardcoreProtester(const int& x, const int& y);
+    // Checks if occupied by protester
+    bool isSquareOccupiedByBoulder(const int& x, const int& y, const ActorsBase::Direction& dir);
+    
+    //For clearing the ice overlapping with boulders
+    bool OccupiedByBoulder(const int& x, const int& y);
+    //Checks if boulder comes within a radius of 3 and annoys the actors
+    void AnnoyingBoulder(const int& x, const int& y);
+    
+    //Checks if barrel is within range of four respect to the Iceman
+    bool isInRangeOfFour(const int& x, const int& y);
+    //Checks if barrel is within range of three respect to the Iceman and in this case activates the barrel
+    bool isInRangeOfThree(const int& x, const int& y);
+    bool isInRangeOfThreeForGNOfIceMan(const int& x, const int& y, bool flag);
+    
+    void setOil() {num_of_oil--;}
+    int getOil() { return num_of_oil;}
+    
+    //Below are functions that keep track of the number of ticks that the actors will exist
+    void setTForSonar() {TForSonar--;}
+    int getTForSonar() {return TForSonar;}
+    void setTForWater() {TForWater--;}
+    int getTForWater() {return TForWater;}
+    
+    //Let Iceman drop the nugget
+    void dropNugget(const int& x, const int& y, const ActorsBase::Direction& direction);
+    
+    //Clean up all the actors that are "dead"
+    void garbageCollector();
+    
+    std::weak_ptr<Iceman> getIceman();
+    std::shared_ptr<ActorsBase> getProtester(bool flag);
+    
+	// Stats presentation.
+	string StatFormat(int,int,int,int,int,int,int,int);
+    void setDisplayText();
+
+	// map creator to find the nearest exit.
+	int** trackingMapCreator();
+
+private:
+	std::shared_ptr<Iceman> myPlayer;
+	std::vector<std::shared_ptr<ActorsBase>> myPlayers;
+	std::unique_ptr<Ice> iceObjects[64][64];
+    int num_of_oil=0;
+    int TForSonar; // Remaining time for the Sonar Kit
+    int TForWater; // REmaining time for the Water Pool
+};
+
+#endif // STUDENTWORLD_H_
+
+/////////////////////////////
+// Should we think about a function that terminates (deletes) all invisible objects after a tick? Means - setting an object to invisible is as good as deleting it w/o a memory leak? //
+// iceDeleter() for example.
+////////////////////////////
+
